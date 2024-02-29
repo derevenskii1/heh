@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract MoneroLikePrivacy {
+    mapping(address => uint256) private balances;
+    mapping(address => bytes32) private viewKeys;
+    mapping(address => uint256) private nonce;
+
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+
+    function deposit(bytes32 viewKey) external payable {
+        // Generate a one-time stealth address for the sender
+        bytes32 stealthAddress = keccak256(abi.encodePacked(msg.sender, viewKey, nonce[msg.sender]));
+
+        // Increment nonce to ensure uniqueness
+        nonce[msg.sender]++;
+
+        // Store the stealth address and update balance
+        viewKeys[msg.sender] = viewKey;
+        balances[stealthAddress] += msg.value;
+    }
+
+    function transfer(address to, uint256 amount) external {
+        // Generate a one-time stealth address for the recipient
+        bytes32 stealthAddress = keccak256(abi.encodePacked(to, viewKeys[to], nonce[to]));
+
+        // Increment nonce to ensure uniqueness
+        nonce[to]++;
+
+        // Transfer funds from sender's stealth address to recipient's stealth address
+        require(balances[stealthAddress] >= amount, "Insufficient balance");
+        balances[stealthAddress] -= amount;
+        balances[keccak256(abi.encodePacked(to, viewKeys[to], nonce[to]))] += amount;
+
+        emit Transfer(msg.sender, to, amount);
+    }
+
+    function withdraw(uint256 amount) external {
+        // Generate a one-time stealth address for the sender
+        bytes32 stealthAddress = keccak256(abi.encodePacked(msg.sender, viewKeys[msg.sender], nonce[msg.sender]));
+
+        // Increment nonce to ensure uniqueness
+        nonce[msg.sender]++;
+
+        // Withdraw funds from sender's stealth address
+        require(balances[stealthAddress] >= amount, "Insufficient balance");
+        balances[stealthAddress] -= amount;
+        payable(msg.sender).transfer(amount);
+    }
+
+    function balanceOf(address account) external view returns (uint256) {
+        return balances[keccak256(abi.encodePacked(account, viewKeys[account], nonce[account]))];
+    }
+}
